@@ -24,9 +24,5 @@ def main():
         N = 10, N_max = 100, p_delta = 0.01, q = 0.99,#0.2, 
         topology = 'pegasus', Q = _Q, log_DIR = "", sim = True)
 
-    min_z = solver.function_f(_Q,z).item()
-    print("\t\t\t"+colors.BOLD+colors.OKGREEN+"RESULTS"+colors.ENDC+"\n")
-    print(log_write("Z",z)+log_write("fQ",round(min_z,2)))
-
 if __name__ == '__main__':
     main()

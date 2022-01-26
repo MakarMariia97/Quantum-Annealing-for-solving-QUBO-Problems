@@ -157,7 +157,10 @@ def modify_temperature(p,p_delta,eta):
 def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, Q, log_DIR, sim):
     
     try:
-        sampler = neal.SimulatedAnnealingSampler()
+        if (not sim):
+            sampler = DWaveSampler({'topology__type':'pegasus'})
+        else:
+            sampler = neal.SimulatedAnnealingSampler()
         A = {(i,j) for i in range(n) for j in range(n)}
         #generate_pegasus(n)
         I = np.identity(n)
@@ -189,7 +192,7 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
             
 
     except KeyboardInterrupt:
-        exit("\n\n["+colors.BOLD+colors.OKGREEN+"KeyboardInterrupt"+colors.ENDC+"] Closing program...")
+        exit()
 
     e = 0
     d = 0

@@ -12,9 +12,6 @@ import csv
 
 np.set_printoptions(threshold=sys.maxsize)
 
-def log_write(tpe, var):
-    return "["+colors.BOLD+str(tpe)+colors.ENDC+"]\t"+str(var)+"\n"
-
 def main():    
     _Q=[[0, -0.2, 0, 0],
         [0, 1.0, -0.5, 1.0],

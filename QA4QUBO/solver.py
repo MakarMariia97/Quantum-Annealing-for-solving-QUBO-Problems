@@ -86,34 +86,16 @@ def map_back(z, perm):
 
     return z_ret
      
-def g(Q, A, oldperm, p, sim):
-    n = len(Q)
-    m = dict()
-    for i in range(n):
-        if make_decision(p):
-            m[i] = i
-    
+def generate_theta(A):
 
-    m = random_shuffle(m)
-    perm = fill(m, oldperm, n)
-    inversed = inverse(perm, n)
-    
-    Theta = dict()
-    if (sim):
-        for row, col in A:
-            k = inversed[row]
-            l = inversed[col]
-            Theta[row, col] = Q[k][l]
-    else:
-        support = dict(zip(A.keys(), np.arange(n))) 
-        for key in list(A.keys()):
-            k = inversed[support[key]]
-            Theta[key, key] = Q[k][k]
-            for elem in A[key]:
-                l = inversed[support[elem]]
-                Theta[key, elem] = Q[k][l]
-              
-    return Theta, perm
+    h = dict()
+    J = dict()
+    for row, col in A:
+        h[row] = 1-2*random.random()
+    for row, col in A:
+        J[row, col] = 1-2*random.random()
+      
+    return h, J
 
 def h(vect, pr):
     n = len(vect)
@@ -123,11 +105,6 @@ def h(vect, pr):
             vect[i] = int((vect[i]+1) % 2)
 
     return vect
-
-def write(dir, string):
-    file = open(dir, 'a')
-    file.write(string+'\n')
-    file.close()
 
 def get_active(sampler, n):
     nodes = dict()
@@ -162,57 +139,34 @@ def counter(vector):
             count += 1
     
     return count
+    
+def update_tabu_matr(h,J,S):
+    hnew = dict()
+    Jnew = dict()
+    n=len(h)
+    for i in range(n):
+        hnew[i]=h[i]+S[i][i]
+        if i<n-1:
+            for j in range(i+1,n):
+                Jnew[i,j] = J[i,j] + S[i,j]
+    return hnew, Jnew
 
-def csv_write(DIR, l):
-    with open(DIR, 'a') as file:
-        writer = csv.writer(file)
-        writer.writerow(l)
-
-def now():
-    return datetime.datetime.now().strftime("%H:%M:%S")
+def modify_temperature(p,p_delta,eta):
+    return p-(p - p_delta)*eta
 
 def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, Q, log_DIR, sim):
     
     try:
-        if (not sim):
-            print(now()+" ["+colors.BOLD+colors.OKGREEN+"LOG"+colors.ENDC+"] "+colors.HEADER+"Started Algorithm in Quantum Mode"+colors.ENDC)
-            sampler = DWaveSampler({'topology__type':topology})
-            print(now()+" ["+colors.BOLD+colors.OKGREEN+"LOG"+colors.ENDC+"] "+colors.HEADER+"Using Pegasus Topology \n"+colors.ENDC)
-            A = get_active(sampler, n)
-            log_DIR.replace("TSP_","TSP_QA_")
-        else:
-            print(now()+" ["+colors.BOLD+colors.OKGREEN+"LOG"+colors.ENDC+"] "+colors.OKCYAN+"Started Algorithm in Simulating Mode"+colors.ENDC)
-            sampler = neal.SimulatedAnnealingSampler()
-            log_DIR.replace("TSP_","TSP_SA_")
-            if(topology == 'chimera'):
-                print(now()+" ["+colors.BOLD+colors.OKGREEN+"LOG"+colors.ENDC+"] "+colors.OKCYAN+"Using Chimera Topology \n"+colors.ENDC)
-                if(n > 2048):
-                    n = int(input(
-                        now()+" ["+colors.WARNING+colors.BOLD+"WARNING"+colors.ENDC+f"] {n} inserted value is bigger than max topology size (2048), please insert a valid n or press any key to exit: "))
-                try:
-                    A = generate_chimera(n)
-                except:
-                    exit()
-            else:
-                print(now()+" ["+colors.BOLD+colors.OKGREEN+"LOG"+colors.ENDC+"] "+colors.HEADER+"Using Pegasus Topology \n"+colors.ENDC)
-                A = generate_pegasus(n)
-
-        print(now()+" ["+colors.BOLD+colors.OKGREEN+"DATA IN"+colors.ENDC+"] dmin = "+str(d_min)+" - eta = "+str(eta)+" - imax = "+str(i_max)+" - k = "+str(k)+" - lambda 0 = "+str(lambda_zero)+" - n = "+str(n) + " - N = "+str(N) + " - Nmax = "+str(N_max)+" - pdelta = "+str(p_delta)+" - q = "+str(q)+"\n")
-        
+        sampler = neal.SimulatedAnnealingSampler()
+        A = {(i,j) for i in range(n) for j in range(n)}
+        #generate_pegasus(n)
         I = np.identity(n)
-        p = 1
-        Theta_one, m_one = g(Q, A, np.arange(n), p, sim)
-        Theta_two, m_two = g(Q, A, np.arange(n), p, sim)
+        p = 1.0
+        h_one, J_one = generate_theta(A)
+        h_two, J_two = generate_theta(A)
 
-        print(now()+" ["+colors.BOLD+colors.OKGREEN+"ANN"+colors.ENDC+"] Working on z1...", end=' ')
-        start = time.time()
-        z_one = map_back(annealer(Theta_one, sampler, k), m_one)
-        convert_1 = datetime.timedelta(seconds=(time.time()-start))
-        print("Ended in "+str(convert_1)+"\n"+now()+" ["+colors.BOLD+colors.OKGREEN+"ANN"+colors.ENDC+"] Working on z2...", end=' ')
-        start = time.time()
-        z_two = map_back(annealer(Theta_two, sampler, k), m_two)
-        convert_2 = datetime.timedelta(seconds=(time.time()-start))
-        print("Ended in "+str(convert_2)+"\n")
+        z_one = annealer(h_one, J_one, sampler, k)
+        z_two = annealer(h_two, J_two, sampler, k)
 
         f_one = function_f(Q, z_one).item()
         f_two = function_f(Q, z_two).item()
@@ -220,12 +174,12 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
         if (f_one < f_two):
             z_star = z_one
             f_star = f_one
-            m_star = m_one
+            h_star, J_star = h_one, J_one,
             z_prime = z_two
         else:
             z_star = z_two
             f_star = f_two
-            m_star = m_two
+            h_star, J_star = h_two, J_two,
             z_prime = z_one
         
         if (f_one != f_two):
@@ -240,90 +194,46 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
     e = 0
     d = 0
     i = 1
-    lam = lambda_zero
     sum_time = 0
-    
+    flag=0
+    S0=np.zeros((n,n))
     while True:
-        print(f"---------------------------------------------------------------------------------------------------------------")
-        start_time = time.time()
-        if sum_time:
-            string = str(datetime.timedelta(seconds=((sum_time/i) * (i_max - i))))
-        else:
-            string = "Not yet available"
-        
-        print(now()+" ["+colors.BOLD+colors.OKGREEN+"PRG"+colors.ENDC+f"] Cycle {i}/{i_max} -- {round((((i-1)/i_max)*100), 2)}% -- ETA {string}") 
-        
 
         try:
-            Q_prime = np.add(Q, (np.multiply(lam, S)))
-            
-            if (i % N == 0):
-                p = p - ((p - p_delta)*eta)
-
-            Theta_prime, m = g(Q_prime, A, m_star, p, sim)
-            
-            print(now()+" ["+colors.BOLD+colors.OKGREEN+"ANN"+colors.ENDC+"] Working on z'...", end=' ')
-            start = time.time()
-            z_prime = map_back(annealer(Theta_prime, sampler, k), m)
-            convert_z = datetime.timedelta(seconds=(time.time()-start))
-            print("Ended in "+str(convert_z))
-
-            if make_decision(q):
-                z_prime = h(z_prime, p)
-
-            if (z_prime != z_star).any() :
-                f_prime = function_f(Q, z_prime).item()
+            if (i % N == 0): # line 13 in the algorithm
+                p = modify_temperature(p,p_delta,eta) # decrease the temperature
                 
-                if (f_prime < f_star):
-                    z_prime, z_star = z_star, z_prime
+            if (make_decision(q)): # with probability q annealing is done
+                h_prime, J_prime = update_tabu_matr(h_star,J_star,S)
+                z_prime = annealer(h_prime, J_prime, sampler, k)
+            else: # with probability 1-q measurement is taken
+                h_prime, J_prime = generate_theta(A)
+                z_prime = [1 if random.random()<0.5 else -1 for i in range(len(z_prime))]
+            
+            if (z_prime != z_star):
+                f_prime = function_f(Q, z_prime).item() # line 18
+                
+                if (f_prime < f_star or ((f_prime >= f_star) and make_decision((p-p_delta)**(f_prime-f_star)))): # line 19: found a better solution or line 24: suboptimal acceptance
+                    e,d = 0,0 # line 23
+                    if(f_prime>=f_star):
+                        d += 1
+                    #else:
+                    S += np.outer(z_star, z_star) - I + np.diagflat(z_star) # line 20: worse solution to tabu
+                    if (np.allclose(S,S0,atol=1e-2)):
+                        flag = i
+                    z_prime, z_star = z_star, z_prime # line 21
                     f_star = f_prime
-                    m_star = m
-                    e = 0
-                    d = 0
-                    S = S + ((np.outer(z_prime, z_prime) - I) +
-                             np.diagflat(z_prime))
-                else:
-                    d = d + 1
-                    if make_decision((p-p_delta)**(f_prime-f_star)):
-                        z_prime, z_star = z_star, z_prime
-                        f_star = f_prime
-                        m_star = m
-                        e = 0
-                lam = min(lambda_zero, (lambda_zero/(2+(i-1)-e)))
-            else:
-                e = e + 1
+                    h_star, J_star = h_prime, J_prime # line 22
 
-            
-            converted = datetime.timedelta(seconds=(time.time()-start_time))
+            else: # line 28: we found the same solution
+                e += 1 
 
-            try:
-                print(now()+" ["+colors.BOLD+colors.OKGREEN+"DATA"+colors.ENDC+f"] f_prime = {round(f_prime,2)}, f_star = {round(f_star,2)}, p = {p}, e = {e}, d = {d} and lambda = {round(lam,5)}\n"+now()+" ["+colors.BOLD+colors.OKGREEN+"DATA"+colors.ENDC+f"] Took {converted} in total")
-                csv_write(DIR=log_DIR,l=[i, f_prime, f_star, p, e, d, lam, z_prime, z_star])
-            except UnboundLocalError:
-                print(now()+" ["+colors.BOLD+colors.OKGREEN+"DATA"+colors.ENDC+f" No variations on f and z. p = {p}, e = {e}, d = {d} and lambda = {round(lam,5)}\n"+now()+" ["+colors.BOLD+colors.OKGREEN+"DATA"+colors.ENDC+f"] Took {converted} in total")
-                csv_write(DIR=log_DIR,l=[i, "null", f_star, p, e, d, lam, "null", z_star])
-            
-            sum_time = sum_time + (time.time() - start_time)
-
-            print(f"---------------------------------------------------------------------------------------------------------------\n")
             if ((i == i_max) or ((e + d >= N_max) and (d < d_min))):
-                if(i != i_max):
-                    print(now()+" ["+colors.BOLD+colors.OKGREEN+"END"+colors.ENDC+"] Exited at cycle " + str(i)+"/"+str(i_max) + " thanks to convergence.")
-                else:
-                    print(now()+" ["+colors.BOLD+colors.OKBLUE+"END"+colors.ENDC+"] Exited at cycle "+str(i)+"/"+str(i_max)+"\n")
                 break
             
-            i = i + 1
+            i += 1
         except KeyboardInterrupt:
             break
-
-    converted = datetime.timedelta(seconds=sum_time)
-    if i != 1:
-        conv = datetime.timedelta(seconds=int(sum_time/(i-1)))
-    else:
-        conv = datetime.timedelta(seconds=int(sum_time))
-    
-    print(now()+" ["+colors.BOLD+colors.OKGREEN+"TIME"+colors.ENDC+"] Average time for iteration: " + str(conv)+"\n"+now()+" ["+colors.BOLD+colors.OKGREEN+"TIME"+colors.ENDC+"] Total time: "+str(converted)+"\n")
-
-    return np.atleast_2d(np.atleast_2d(z_star).T).T[0], conv
-
+    if(flag>0):
+        print(flag)
+    return np.atleast_2d(np.atleast_2d(z_star).T).T[0], 0.0

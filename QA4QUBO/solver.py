@@ -158,7 +158,7 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
     
     try:
         if (not sim):
-            sampler = DWaveSampler({'topology__type':'pegasus'})
+            sampler = EmbeddingComposite(DWaveSampler({'topology__type':'pegasus'}))
         else:
             sampler = neal.SimulatedAnnealingSampler()
         A = {(i,j) for i in range(n) for j in range(n)}

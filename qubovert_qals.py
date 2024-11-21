@@ -7,9 +7,10 @@ from copy import deepcopy
 import itertools
 import multiprocessing
 from qubovert.sat import AND, OR, XOR, XNOR, NAND, NOT
-from qubovert.utils import QUBOMatrix
+from qubovert.utils import QUBOMatrix, qubo_to_matrix
 from neal import SimulatedAnnealingSampler
 from qubovert import PCBO, PUBO
+from qubovert.sim import anneal_pubo
 from itertools import combinations, product
 import copy
 import time
@@ -95,6 +96,13 @@ def check_sat(s,nvars,ngates,nrows,ncols,x):
     while not ifsat and indN<N:
         print("ifsat", ifsat)
         Q=cnf1.to_qubo().Q
+
+        quso = cnf1.to_quso()
+        qub_h, qub_J = quso.h, quso.J
+       # print("bruteforce", cnf1.solve_bruteforce())
+     #   print("anneal pubo", anneal_pubo(cnf1, num_anneals=1))
+        print("Q",Q)
+        Qmatr = qubo_to_matrix(Q,symmetric=False)
         Qlist = list(Q.keys())
         max_i = 0
         for (i,j) in Qlist:
@@ -103,9 +111,9 @@ def check_sat(s,nvars,ngates,nrows,ncols,x):
         print("max_i",max_i)
  #       qubo_sample11 = sampler.sample_qubo(cnf1.to_qubo().Q, num_reads=2000)
 
-        qubo_sample11, f_star, r_time = solver.solve(d_min = 70, eta = 0.02, i_max = 200, k = 10000, lambda_zero = 3/2, n = max_i, 
+        qubo_sample11, f_star, r_time = solver.solve(d_min = 70, eta = 0.02, i_max = 200, k = 1000, lambda_zero = 3/2, n = max_i, 
         N = 10, N_max = 100, p_delta = 0.01, q = 0.9, 
-        topology = 'pegasus', Q = Q, cnf = cnf1, log_DIR = "", sim = True)
+        topology = 'pegasus', Q = Q, Qmatr = Qmatr, qub_h = qub_h, qub_J = qub_J, cnf = cnf1, log_DIR = "", sim = True)
 
      #   print("parameters",sampler.parameters)
         solution11 = cnf1.convert_solution(qubo_sample11)
@@ -183,8 +191,8 @@ def astar_search(start,goal):
 #toffoli
 #gates=[[2,0],[1,0],[2,1],[1,0],[2,1]]
 #dep_graph={2:[1], 3:[2], 4:[3]}
-gates=[[2,0],[1,0]]
-dep_graph={}
+gates=[[2,0],[1,0],[2,1]]
+dep_graph={2:[1]}
 
 
 

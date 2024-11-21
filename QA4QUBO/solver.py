@@ -9,15 +9,27 @@ import datetime
 import neal
 import sys
 import csv
+import dimod
 from random import SystemRandom
 from QA4QUBO.colors import colors
 from dwave.system.composites.embedding import EmbeddingComposite
 random = SystemRandom()
 np.set_printoptions(linewidth=np.inf,threshold=sys.maxsize)
 
+def ising_qubo(z):
+    x = []
+  #  print("len ",len(z))
+    for i in range(len(z)):
+        x.append(int((1-z[i])/2))
+    return x
 
-def function_f(Q, x):
-    return np.matmul(np.matmul(x, Q), np.atleast_2d(x).T)
+def function_f(Q, z,n):
+ #   print(z)
+    x = ising_qubo(z)
+    QUBO = np.zeros((n,n))
+    for (i,j) in Q:
+        QUBO[i][j] = Q.get((i,j))
+    return np.matmul(np.matmul(x, QUBO), np.atleast_2d(x).T)
 
 def make_decision(probability):
     return random.random() < probability
@@ -140,21 +152,24 @@ def counter(vector):
     
     return count
     
-def update_tabu_matr(h,J,S):
+def update_tabu_matr(h,J,S,lam):
     hnew = dict()
     Jnew = dict()
     n=len(h)
     for i in range(n):
-        hnew[i]=h[i]+S[i][i]
+        hnew[i]=h[i]+lam*S[i][i]
         if i<n-1:
             for j in range(i+1,n):
-                Jnew[i,j] = J[i,j] + S[i,j]
+                if (i,j) in J:
+                    Jnew[i,j] = J[i,j] + lam*S[i,j]
+                else:
+                    Jnew[i,j] = lam*S[i,j]
     return hnew, Jnew
 
 def modify_temperature(p,p_delta,eta):
     return p-(p - p_delta)*eta
 
-def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, Q, log_DIR, sim):
+def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, Q, cnf, log_DIR, sim):
     
     try:
         if (not sim):
@@ -165,24 +180,25 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
         #generate_pegasus(n)
         I = np.identity(n)
         p = 1.0
-        h_one, J_one = generate_theta(A)
-        h_two, J_two = generate_theta(A)
+        h, J, ee = dimod.qubo_to_ising(Q)
 
-        z_one = annealer(h_one, J_one, sampler, k)
-        z_two = annealer(h_two, J_two, sampler, k)
+        z_one = annealer(h, J, sampler, k, cnf)
+        z_two = annealer(h, J, sampler, k, cnf)
 
-        f_one = function_f(Q, z_one).item()
-        f_two = function_f(Q, z_two).item()
+        f_one = function_f(Q, z_one,n).item()
+        f_two = function_f(Q, z_two,n).item()
 
         if (f_one < f_two):
+            print("f star ", f_one)
             z_star = z_one
             f_star = f_one
-            h_star, J_star = h_one, J_one,
+            h_star, J_star = h, J,
             z_prime = z_two
         else:
+            print("f star ", f_two)
             z_star = z_two
             f_star = f_two
-            h_star, J_star = h_two, J_two,
+            h_star, J_star = h, J,
             z_prime = z_one
         
         if (f_one != f_two):
@@ -198,6 +214,7 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
     d = 0
     i = 1
     sum_time = 0
+    lam = lambda_zero
     flag=0
     S0=np.zeros((n,n))
     while True:
@@ -207,27 +224,30 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
                 p = modify_temperature(p,p_delta,eta) # decrease the temperature
                 
             if (make_decision(q)): # with probability q annealing is done
-                h_prime, J_prime = update_tabu_matr(h_star,J_star,S)
-                z_prime = annealer(h_prime, J_prime, sampler, k)
+                h_prime, J_prime = update_tabu_matr(h_star,J_star,S,lam)
+                z_prime = annealer(h_prime, J_prime, sampler, k, cnf)
             else: # with probability 1-q measurement is taken
                 h_prime, J_prime = generate_theta(A)
+                print("we are here")
                 z_prime = [1 if random.random()<0.5 else -1 for i in range(len(z_prime))]
             
             if (z_prime != z_star):
-                f_prime = function_f(Q, z_prime).item() # line 18
+                f_prime = function_f(Q, z_prime,n).item() # line 18
                 
                 if (f_prime < f_star or ((f_prime >= f_star) and make_decision((p-p_delta)**(f_prime-f_star)))): # line 19: found a better solution or line 24: suboptimal acceptance
                     e,d = 0,0 # line 23
                     if(f_prime>=f_star):
                         d += 1
                     #else:
-                    S += np.outer(z_star, z_star) - I + np.diagflat(z_star) # line 20: worse solution to tabu
-                    if (np.allclose(S,S0,atol=1e-2)):
-                        flag = i
+                    
                     z_prime, z_star = z_star, z_prime # line 21
                     f_star = f_prime
                     h_star, J_star = h_prime, J_prime # line 22
 
+                S += np.outer(z_prime, z_prime) - I + np.diagflat(z_prime) # line 20: worse solution to tabu
+                if (np.allclose(S,S0,atol=1e-2)):
+                    flag = i
+                lam = min(lambda_zero, (lambda_zero/(2+(i-1)-e+0.1)))
             else: # line 28: we found the same solution
                 e += 1 
 
@@ -238,5 +258,5 @@ def solve(d_min, eta, i_max, k, lambda_zero, n, N, N_max, p_delta, q, topology, 
         except KeyboardInterrupt:
             break
     if(flag>0):
-        print(flag)
-    return np.atleast_2d(np.atleast_2d(z_star).T).T[0], 0.0
+        print("flag ", flag)
+    return ising_qubo(np.atleast_2d(np.atleast_2d(z_star).T).T[0]), f_star, 0.0

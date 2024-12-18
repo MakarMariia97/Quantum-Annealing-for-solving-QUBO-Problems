@@ -1,5 +1,4 @@
-# Quantum Annealing for solving QUBO Problems
-
+# Tabu-Enhanced Quantum Annealing for solving quantum circuit optimization problem
 Python implementation of QALS: Pastorello, D. and Blanzieri, E., 2019. Quantum annealing learning search for solving QUBO problems. Quantum Information Processing, 18(10), p.303.
 
 We apply particular case of QALS (TEQAHQO) to local qubit reordering to perform quantum circuit optimization by minimizing SWAP count.

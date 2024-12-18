@@ -8,7 +8,7 @@ import numpy as np
 from QA4QUBO import solver
 from utils_qals import manhattan, astar_search
 
-# function to consruct boolean function in CNF for the circuit
+# function to construct boolean function in CNF for the circuit
 def check_sat(s,nvars,ngates,nrows,ncols,x):
     # condition2 (each qubit is assigned to only one cell of the grid)
     cnf1 = PCBO()
